@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STARFIELD // Simulador de Vuelo Interplanetario</title>
+    <script type="module" crossorigin src="/assets/index-DJthgB14.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CAjg9y-g.css">
+  </head>
+  <body>
+    <canvas id="app-canvas"></canvas>
+
+    <!-- Viñeta de transición atmosférica / hipersalto -->
+    <div id="atmosphere-overlay" class="atmosphere-overlay"></div>
+
+    <!-- Pantalla de carga inicial -->
+    <div id="loading-screen" class="loading-screen">
+      <div class="loading-card">
+        <div class="loading-tag">CONSTELLATION NAV-OS // REV 4.2</div>
+        <h1 class="loading-title">SISTEMA ESTELAR INTERACTIVO</h1>
+        <p id="loading-status" class="loading-status">Inicializando telemetría y decodificador Draco...</p>
+        <div class="loading-bar-track">
+          <div id="loading-bar-fill" class="loading-bar-fill"></div>
+        </div>
+        <div class="loading-hint">Draco GLB Pipeline · Logarithmic Depth · UnrealBloom HDR</div>
+      </div>
+    </div>
+
+    <!-- HUD de Nave Espacial estilo Starfield -->
+    <div id="hud" class="hud">
+      <!-- Barra superior de telemetría orbital / planetaria -->
+      <header class="hud-top">
+        <div class="hud-pill">
+          <span class="hud-label">MODO DE VUELO</span>
+          <span id="hud-mode" class="hud-value mode-orbit">ÓRBITA</span>
+        </div>
+        <div class="hud-pill hud-sector-pill">
+          <span class="hud-label">SECTOR / CUERPO ACTUAL</span>
+          <span id="hud-sector" class="hud-value">SISTEMA SOLAR CENTRAL</span>
+        </div>
+        <div class="hud-pill">
+          <span class="hud-label">CUERPO MÁS CERCANO</span>
+          <span id="hud-nearest" class="hud-value">Sol Central · -- km</span>
+        </div>
+        <div class="hud-pill">
+          <span class="hud-label">ALTITUD SOBRE SUPERFICIE</span>
+          <span id="hud-altitude" class="hud-value">-- km</span>
+        </div>
+        <button
+          id="hud-time-btn"
+          class="hud-pill hud-time-pill"
+          type="button"
+          title="Velocidad orbital y rotación día/noche (Tecla T)"
+        >
+          <span class="hud-label">TIEMPO [T] · CICLO SOLAR</span>
+          <span id="hud-time" class="hud-value">1x · ESPACIO</span>
+        </button>
+      </header>
+
+      <!-- Retícula central de puntería y horizonte artificial -->
+      <div class="hud-reticle-container">
+        <svg class="hud-reticle" viewBox="0 0 220 220" aria-hidden="true">
+          <!-- Anillo exterior discontinuo -->
+          <circle cx="110" cy="110" r="64" class="reticle-ring-outer" />
+          <!-- Marcas de cabeceo / horizonte -->
+          <line x1="30" y1="110" x2="62" y2="110" class="reticle-line" />
+          <line x1="158" y1="110" x2="190" y2="110" class="reticle-line" />
+          <line x1="110" y1="36" x2="110" y2="58" class="reticle-line-thin" />
+          <line x1="110" y1="162" x2="110" y2="184" class="reticle-line-thin" />
+          <!-- Corchetes de fijación central -->
+          <path d="M 88 94 L 80 94 L 80 126 L 88 126" class="reticle-bracket" />
+          <path d="M 132 94 L 140 94 L 140 126 L 132 126" class="reticle-bracket" />
+          <!-- Punto central -->
+          <circle cx="110" cy="110" r="2.6" class="reticle-center-dot" />
+        </svg>
+
+        <div id="hud-transition-banner" class="hud-transition-banner hidden">
+          <div class="banner-subtitle" id="banner-subtitle">PROTOCOLO DE ATERRIZAJE</div>
+          <div class="banner-title" id="banner-title">REENTRADA ATMOSFÉRICA</div>
+        </div>
+
+        <div id="hud-lock-prompt" class="hud-lock-prompt">
+          Haz clic en la cabina para bloquear el timón (`ESC` para liberar · o arrastra con el ratón)
+        </div>
+      </div>
+
+      <!-- Panel izquierdo: Velocímetro, empuje y controles -->
+      <aside class="hud-left">
+        <div class="hud-panel">
+          <div class="panel-header">PROPULSIÓN Y TELEMETRÍA</div>
+          <div class="speed-readout">
+            <span id="hud-speed" class="speed-number">0</span>
+            <span id="hud-speed-unit" class="speed-unit">m/s</span>
+          </div>
+          <div class="speed-bar-track">
+            <div id="hud-speed-bar" class="speed-bar-fill"></div>
+          </div>
+          <div class="telemetry-row">
+            <span>MULTIPLICADOR (RUEDA)</span>
+            <strong id="hud-mult">x1.0</strong>
+          </div>
+          <div class="telemetry-row">
+            <span>MOTOR PULSE [SHIFT]</span>
+            <strong id="hud-boost" class="status-standby">EN ESPERA</strong>
+          </div>
+          <div class="telemetry-row">
+            <span>COORDENADAS</span>
+            <strong id="hud-coords">0, 0, 0</strong>
+          </div>
+        </div>
+
+        <div class="hud-panel controls-panel">
+          <div class="panel-header">CONTROLES DE VUELO</div>
+          <ul class="controls-list">
+            <li><kbd>W</kbd><kbd>S</kbd> Acelerar / Frenar</li>
+            <li><kbd>A</kbd><kbd>D</kbd> Desplazamiento lateral</li>
+            <li><kbd>Q</kbd><kbd>E</kbd> Alabeo (Roll)</li>
+            <li><kbd>Espacio</kbd><kbd>Ctrl</kbd> Ascenso / Descenso</li>
+            <li><kbd>Shift</kbd> Impulso Subluz / Hipersalto</li>
+            <li><kbd>Rueda</kbd> Multiplicador de velocidad</li>
+            <li><kbd>T</kbd> Tiempo orbital y Día/Noche (1x/10x/60x)</li>
+            <li><kbd>M</kbd> Mapa Estelar Interactivo</li>
+            <li><kbd>Ratón</kbd> Cabeceo y Guiñada (Pitch / Yaw)</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Radar / Minimapa táctico circular en esquina superior derecha -->
+      <aside id="tactical-minimap" class="tactical-minimap" title="Abrir Mapa Estelar Interactivo (Tecla M)">
+        <div class="minimap-ring-wrap">
+          <canvas id="minimap-canvas" width="170" height="170"></canvas>
+          <span id="minimap-scale" class="minimap-scale">SISTEMA</span>
+        </div>
+        <button id="minimap-open-btn" class="minimap-open-btn" type="button">
+          <kbd>M</kbd> MAPA ESTELAR
+        </button>
+      </aside>
+
+      <!-- Radar / Salto rápido a monumentos 360° de Pandora (visible dentro de Pandora) -->
+      <div id="pandora-landmarks-bar" class="pandora-landmarks-bar hidden" aria-label="Monumentos de Pandora">
+        <span class="pandora-bar-title">HITOS DE PANDORA (360°)</span>
+        <div class="pandora-bar-btns">
+          <button class="pandora-lm-btn" data-landmark="hometree" type="button">
+            <strong>Árbol-Casa</strong>
+            <small data-dist="hometree">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="hallelujah" type="button">
+            <strong>Aleluya</strong>
+            <small data-dist="hallelujah">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="rookery" type="button">
+            <strong>Nido Ikran</strong>
+            <small data-dist="rookery">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="souls" type="button">
+            <strong>Árbol Almas</strong>
+            <small data-dist="souls">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="mushrooms" type="button">
+            <strong>Setas / Géiseres</strong>
+            <small data-dist="mushrooms">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="ashland" type="button">
+            <strong>Ceniza / Volcanes</strong>
+            <small data-dist="ashland">-- km</small>
+          </button>
+          <button class="pandora-lm-btn" data-landmark="metkayina" type="button">
+            <strong>Arrecife Metkayina</strong>
+            <small data-dist="metkayina">-- km</small>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mapa Estelar Holográfico Interactivo 3D en 2 Niveles (Tecla M) -->
+    <section id="star-map-overlay" class="star-map-overlay hidden" aria-label="Mapa Estelar Holográfico">
+      <canvas id="star-map-canvas"></canvas>
+      <div id="star-map-labels" class="star-map-labels" aria-hidden="true"></div>
+
+      <header class="star-map-header">
+        <div class="star-map-header-left">
+          <button id="star-map-back-btn" class="star-map-back-btn hidden" type="button">
+            ← VOLVER AL SISTEMA SOLAR
+          </button>
+          <div class="star-map-title-block">
+            <span id="star-map-level-tag" class="star-map-level-tag">CARTOGRAFÍA ESTELAR // NIVEL 1</span>
+            <h2 id="star-map-title" class="star-map-title">SISTEMA SOLAR CENTRAL</h2>
+          </div>
+        </div>
+        <button id="star-map-close-btn" class="star-map-close-btn" type="button">
+          <kbd>M</kbd> / <kbd>ESC</kbd> CERRAR MAPA
+        </button>
+      </header>
+
+      <aside id="star-map-dossier" class="star-map-dossier hidden" aria-label="Ficha de Destino">
+        <div id="dossier-badge" class="dossier-badge">NODO ORBITAL</div>
+        <h3 id="dossier-title" class="dossier-title">--</h3>
+        <p id="dossier-desc" class="dossier-desc">--</p>
+        <div class="dossier-specs">
+          <div class="dossier-spec-row">
+            <span>TIPO DE DESTINO</span>
+            <strong id="dossier-type">--</strong>
+          </div>
+          <div class="dossier-spec-row">
+            <span>ALTITUD DE INSERCIÓN</span>
+            <strong id="dossier-alt">--</strong>
+          </div>
+          <div class="dossier-spec-row">
+            <span>ATMÓSFERA / GRAVEDAD</span>
+            <strong id="dossier-atmo">--</strong>
+          </div>
+          <div class="dossier-spec-row">
+            <span>DISTANCIA DE SALTO</span>
+            <strong id="dossier-dist">--</strong>
+          </div>
+        </div>
+        <button id="star-map-jump-btn" class="star-map-jump-btn" type="button">
+          INICIAR SALTO / VIAJAR AQUÍ
+        </button>
+        <div class="dossier-hint">También con Doble Clic sobre el nodo o tecla <kbd>Enter</kbd></div>
+      </aside>
+
+      <footer id="star-map-footer" class="star-map-footer">
+        Haz clic en un planeta para inspeccionar su sistema local (lunas, estaciones y regiones) · <kbd>Backspace</kbd> o Clic Derecho para retroceder
+      </footer>
+    </section>
+
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "simulador-galaxia",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/sync_assets.mjs && vite --configLoader native",
+    "build": "node scripts/sync_assets.mjs && vite build --configLoader native",
+    "preview": "vite preview --configLoader native",
+    "sync": "node scripts/sync_assets.mjs",
+    "postinstall": "node scripts/sync_assets.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
